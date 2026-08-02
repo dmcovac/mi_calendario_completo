@@ -18,7 +18,16 @@
       color: black;
     }
     @media (max-width: 600px) {
-      table { display: block; overflow-x: auto; white-space: nowrap; }
+      table { table-layout: fixed; width: 100%; }
+      th, td {
+        min-width: 0;
+        padding: 4px;
+        font-size: 13px;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+      }
+      li { font-size: 13px; margin-bottom: 4px; }
+      li button { font-size: 11px; padding: 2px 4px; }
     }
   </style>
 </head>
