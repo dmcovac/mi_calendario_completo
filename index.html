@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Mi calendario</title>
+  <style>
+    table { border-collapse: collapse; margin-top: 20px; }
+    th, td { border: 1px solid #ccc; padding: 8px; vertical-align: top; min-width: 150px; }
+    th { background: #f0f0f0; }
+    li { list-style: none; margin-bottom: 4px; }
+  </style>
+</head>
+<body>
+  <h1>¿Que como hoy?</h1>
+
+  <input type="date" id="fecha">
+  <select id="tipoComida">
+    <option value="Desayuno">Desayuno</option>
+    <option value="Almuerzo">Almuerzo</option>
+    <option value="Merienda">Merienda</option>
+    <option value="Cena">Cena</option>
+  </select>
+  <input type="text" id="comida" placeholder="Escribe tu comida">
+  <button onclick="anadirComida()">Añadir</button>
+  <hr>
+    <h3>Que tengo en la nevera?</h3>
+    <label>Empezar semana el: <input type="date" id="fechaInicioSemana"></label>
+    <br>
+    <textarea id="ingredientes" placeholder="Ej: huevos, espinacas, queso, tomate..." rows="3" style="width: 400px;"></textarea>
+    <br>
+    <button onclick="generarMenu()">Generar menu con IA</button>
+    <button onclick="borrarTodo()">Borrar todo</button>
+    <p id="resultadoMenu" style="white-space: pre-wrap;"></p>
+
+
+  <table id="tablaCalendario">
+    <thead>
+      <tr>
+        <th>Dia</th>
+        <th>Desayuno</th>
+        <th>Almuerzo</th>
+        <th>Merienda</th>
+        <th>Cena</th>
+      </tr>
+    </thead>
+    <tbody id="cuerpoTabla"></tbody>
+  </table>
+
+  <script>
+    const dias = ["domingo", "lunes", "martes", "miercoles", "jueves", "viernes", "sabado"];
+    const secciones = ["Desayuno", "Almuerzo", "Merienda", "Cena"];
+
+    function guardarEnStorage(fecha, tipo, texto) {
+      const datos = JSON.parse(localStorage.getItem("comidas") || "{}");
+      if (!datos[fecha]) datos[fecha] = {};
+      if (!datos[fecha][tipo]) datos[fecha][tipo] = [];
+      datos[fecha][tipo].push(texto);
+      localStorage.setItem("comidas", JSON.stringify(datos));
+    }
+
+    function cargarDeStorage() {
+      const datos = JSON.parse(localStorage.getItem("comidas") || "{}");
+      for (const fecha in datos) {
+        for (const tipo in datos[fecha]) {
+          datos[fecha][tipo].forEach(function(texto) {
+            document.getElementById("fecha").value = fecha;
+            document.getElementById("tipoComida").value = tipo;
+            document.getElementById("comida").value = texto;
+            anadirComida(true);
+          });
+        }
+      }
+    }
+
+    function borrarTodo() {
+      const confirmar = confirm("Esto va a borrar todo el calendario. Seguro?");
+      if (!confirmar) return;
+
+      localStorage.removeItem("comidas");
+      document.getElementById("cuerpoTabla").innerHTML = "";
+    }
+    
+
+    function obtenerFila(fecha) {
+      let fila = document.getElementById("fila-" + fecha);
+      if (!fila) {
+        const fechaObj = new Date(fecha + "T00:00:00");
+        const nombreDia = dias[fechaObj.getDay()];
+
+        fila = document.createElement("tr");
+        fila.id = "fila-" + fecha;
+
+        const celdaDia = document.createElement("td");
+        celdaDia.innerHTML = "<strong>" + nombreDia + "</strong><br>" + fecha;
+        fila.appendChild(celdaDia);
+
+        secciones.forEach(function(seccion) {
+          const celda = document.createElement("td");
+          celda.id = "celda-" + fecha + "-" + seccion;
+          const lista = document.createElement("ul");
+          celda.appendChild(lista);
+          fila.appendChild(celda);
+        });
+
+        document.getElementById("cuerpoTabla").appendChild(fila);
+      }
+      return fila;
+    }
+
+    function anadirComida(cargando) {
+      const fecha = document.getElementById("fecha").value;
+      const tipo = document.getElementById("tipoComida").value;
+      const texto = document.getElementById("comida").value;
+
+      if (!fecha || !texto) {
+        alert("Falta la fecha o la comida");
+        return;
+      }
+
+      obtenerFila(fecha);
+
+      const celda = document.getElementById("celda-" + fecha + "-" + tipo);
+      const lista = celda.querySelector("ul");
+
+      const item = document.createElement("li");
+      item.textContent = texto + " ";
+
+      const borrar = document.createElement("button");
+      borrar.textContent = "✕";
+      borrar.onclick = function() {
+        item.remove();
+      };
+      item.appendChild(borrar);
+
+      lista.appendChild(item);
+
+      if (!cargando) guardarEnStorage(fecha, tipo, texto);
+
+      document.getElementById("comida").value = "";
+    }
+
+    cargarDeStorage();
+
+    async function generarMenu() {
+        const ingredientes = document.getElementById("ingredientes").value;
+        const fechaInicio = document.getElementById("fechaInicioSemana").value;
+        const resultado = document.getElementById("resultadoMenu");
+
+  if (!fechaInicio) {
+    alert("Elige una fecha de inicio");
+    return;
+  }
+
+  resultado.textContent = "Generando menu semanal...";
+
+  try {
+    const respuesta = await fetch("http://127.0.0.1:5000/menu", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ingredientes: ingredientes, fechaInicio: fechaInicio })
+    });
+
+    const datos = await respuesta.json();
+
+    if (datos.error) {
+      resultado.textContent = "Error: " + datos.error;
+      return;
+    }
+
+    datos.dias.forEach(function(dia) {
+      obtenerFila(dia.fecha);
+      secciones.forEach(function(seccion) {
+        const celda = document.getElementById("celda-" + dia.fecha + "-" + seccion);
+        const lista = celda.querySelector("ul");
+
+        const item = document.createElement("li");
+        item.textContent = dia[seccion] + " ";
+
+        const borrar = document.createElement("button");
+        borrar.textContent = "✕";
+        borrar.onclick = function() { item.remove(); };
+        item.appendChild(borrar);
+
+        lista.appendChild(item);
+        guardarEnStorage(dia.fecha, seccion, dia[seccion]);
+      });
+    });
+
+    resultado.textContent = "Menu semanal añadido a la tabla";
+  } catch (error) {
+    resultado.textContent = "Error al conectar con el servidor: " + error;
+  }
+}
+
+  </script>
+</body>
+</html>
