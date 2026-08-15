@@ -49,7 +49,7 @@
     <br>
     <textarea id="ingredientes" placeholder="Ej: huevos, espinacas, queso, tomate..." rows="3" style="width: 400px;"></textarea>
     <br>
-    <button onclick="generarMenu()">Generar menu con IA</button>
+    <button id="btnGenerarMenu" onclick="generarMenu()">Generar menu con IA</button>
     <button onclick="borrarTodo()">Borrar todo</button>
     <p id="resultadoMenu" style="white-space: pre-wrap;"></p>
 
@@ -166,6 +166,7 @@
         const ingredientes = document.getElementById("ingredientes").value;
         const fechaInicio = document.getElementById("fechaInicioSemana").value;
         const resultado = document.getElementById("resultadoMenu");
+        const boton = document.getElementById("btnGenerarMenu");
 
   if (!fechaInicio) {
     alert("Elige una fecha de inicio");
@@ -173,6 +174,10 @@
   }
 
   resultado.textContent = "Generando menu semanal...";
+  boton.disabled = true;
+
+  // datos se rellena en la fase de red; luego lo usamos para pintar la tabla
+  let datos = null;
 
   try {
     const respuesta = await fetch("https://planificador-de-comidas.onrender.com/menu", {
@@ -181,13 +186,39 @@
       body: JSON.stringify({ ingredientes: ingredientes, fechaInicio: fechaInicio })
     });
 
-    const datos = await respuesta.json();
+    // La respuesta puede no ser JSON (por ejemplo, una pagina de error de Render)
+    try {
+      datos = await respuesta.json();
+    } catch (errorDeLectura) {
+      resultado.textContent = respuesta.ok
+        ? "El servidor no respondio correctamente. Vuelve a intentarlo en unos segundos."
+        : "El servidor respondio con un error (codigo " + respuesta.status + ").";
+      return;
+    }
 
-    if (datos.error) {
+    if (datos && datos.error) {
       resultado.textContent = "Error: " + datos.error;
       return;
     }
 
+    if (!respuesta.ok) {
+      resultado.textContent = "El servidor respondio con un error (codigo " + respuesta.status + ").";
+      return;
+    }
+
+    if (!datos || !Array.isArray(datos.dias)) {
+      resultado.textContent = "El servidor devolvio un formato inesperado. Vuelve a intentarlo.";
+      return;
+    }
+  } catch (error) {
+    resultado.textContent = "Error al conectar con el servidor: " + error;
+    return;
+  } finally {
+    boton.disabled = false;
+  }
+
+  // A partir de aqui ya no hay red: si algo falla, es al pintar la tabla
+  try {
     datos.dias.forEach(function(dia) {
       obtenerFila(dia.fecha);
       secciones.forEach(function(seccion) {
@@ -209,7 +240,7 @@
 
     resultado.textContent = "Menu semanal añadido a la tabla";
   } catch (error) {
-    resultado.textContent = "Error al conectar con el servidor: " + error;
+    resultado.textContent = "El menu llego bien, pero hubo un problema al mostrarlo: " + error;
   }
 }
 
